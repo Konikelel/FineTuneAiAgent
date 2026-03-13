@@ -63,17 +63,17 @@ class VLMService:
     """
 
     def __init__(
-        self,
-        model_id: str,
-        *,
-        device: Optional[str] = None,
-        torch_dtype: Optional[torch.dtype] = None,
-        max_new_tokens: int = 512,
-        cache_dir: Optional[str] = None,
-        hf_token: Optional[str] = None,
-        max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
-        backoff_base: float = _DEFAULT_BACKOFF_BASE,
-        backoff_max: float = _DEFAULT_BACKOFF_MAX,
+            self,
+            model_id: str,
+            *,
+            device: Optional[str] = None,
+            torch_dtype: Optional[torch.dtype] = None,
+            max_new_tokens: int = 512,
+            cache_dir: Optional[str] = None,
+            hf_token: Optional[str] = None,
+            max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
+            backoff_base: float = _DEFAULT_BACKOFF_BASE,
+            backoff_max: float = _DEFAULT_BACKOFF_MAX,
     ) -> None:
         self.model_id = model_id
         self.max_new_tokens = max_new_tokens
@@ -139,12 +139,12 @@ class VLMService:
     # ── Public API ─────────────────────────────────────────────────────
 
     def generate(
-        self,
-        system_prompt: str,
-        user_prompt: str,
-        *,
-        images: Optional[List[Union[Image.Image, bytes, Path, str]]] = None,
-        texts: Optional[List[str]] = None,
+            self,
+            system_prompt: str,
+            user_prompt: str,
+            *,
+            images: Optional[List[Union[Image.Image, bytes, Path, str]]] = None,
+            texts: Optional[List[str]] = None,
     ) -> str:
         """
         Run inference and return the model's text response.
@@ -226,7 +226,20 @@ class VLMService:
 
     def _load_model(self):
         """
-        Try Qwen-specific class first; fall back to AutoModelForVision2Seq.
+        Load the VLM using the correct class for the given model ID.
+
+        Routing logic:
+          • Qwen2.5-VL model IDs (contain "Qwen2.5-VL" or "Qwen2_5_VL") →
+            use Qwen2_5_VLForConditionalGeneration explicitly.
+          • Everything else (incl. Qwen3-VL and future models) →
+            use AutoModelForVision2Seq so HuggingFace picks the right class
+            automatically from the model config.
+
+        Previously the code tried Qwen2_5_VLForConditionalGeneration first for
+        ALL models.  When loading Qwen3-VL with that class the load *succeeds*
+        (no exception is raised) but the weights are silently mismatched
+        (dozens of UNEXPECTED / MISSING keys), causing the model to produce
+        garbage output like strings of '!' characters instead of valid JSON.
 
         device_map="auto" is used only when self._use_device_map is True
         (i.e. bare "cuda", multi-GPU "cuda:0,1", or auto-detected).
@@ -242,16 +255,30 @@ class VLMService:
         if self._use_device_map:
             common_kwargs["device_map"] = "auto"
 
-        try:
-            from transformers import Qwen2_5_VLForConditionalGeneration
+        # Detect Qwen2.5-VL by model ID to use its dedicated class.
+        # Any other model (Qwen3-VL, LLaVA, InternVL, …) uses Auto.
+        _mid_lower = self.model_id.lower()
+        _is_qwen25_vl = "qwen2.5-vl" in _mid_lower or "qwen2_5_vl" in _mid_lower
 
-            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(self.model_id, **common_kwargs)
-            logger.debug("Loaded via Qwen2_5_VLForConditionalGeneration")
-        except (ImportError, OSError, ValueError):
+        if _is_qwen25_vl:
+            try:
+                from transformers import Qwen2_5_VLForConditionalGeneration
+
+                model = Qwen2_5_VLForConditionalGeneration.from_pretrained(self.model_id, **common_kwargs)
+                logger.debug("Loaded via Qwen2_5_VLForConditionalGeneration")
+            except (ImportError, OSError, ValueError) as exc:
+                logger.warning("Qwen2_5_VLForConditionalGeneration failed (%s), falling back to Auto", exc)
+                from transformers import AutoModelForVision2Seq
+
+                model = AutoModelForVision2Seq.from_pretrained(self.model_id, **common_kwargs)
+                logger.debug("Loaded via AutoModelForVision2Seq (fallback)")
+        else:
+            # For Qwen3-VL and all other VLMs use Auto so transformers picks
+            # the correct architecture class from the model's config.json.
             from transformers import AutoModelForVision2Seq
 
             model = AutoModelForVision2Seq.from_pretrained(self.model_id, **common_kwargs)
-            logger.debug("Loaded via AutoModelForVision2Seq (fallback)")
+            logger.debug("Loaded via AutoModelForVision2Seq")
 
         # When not using device_map, move model to the exact requested device
         if not self._use_device_map:
@@ -263,10 +290,10 @@ class VLMService:
     # ── Input preparation ──────────────────────────────────────────────
 
     def _build_user_content(
-        self,
-        images: List,
-        texts: List[str],
-        user_prompt: str,
+            self,
+            images: List,
+            texts: List[str],
+            user_prompt: str,
     ) -> Tuple[List[Image.Image], List[Dict]]:
         """Convert raw inputs into a HF-compatible content list."""
         pil_images: List[Image.Image] = []
@@ -339,7 +366,7 @@ class VLMService:
                     delay = min(
                         self.backoff_base * (2 ** (attempt - 1)),
                         self.backoff_max,
-                    )
+                        )
                     logger.info("Retrying in %.1f s …", delay)
                     time.sleep(delay)
 
@@ -348,6 +375,8 @@ class VLMService:
 
     @torch.no_grad()
     def _run_generation(self, inputs) -> str:
+        # do_sample=False means greedy decoding; temperature/top_p/top_k are
+        # not valid in that mode and produce noisy warnings — omit them.
         output_ids = self._model.generate(
             **inputs,
             max_new_tokens=self.max_new_tokens,

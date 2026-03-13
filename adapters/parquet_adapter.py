@@ -95,10 +95,10 @@ class ParquetAdapter(BaseFileAdapter):
     """
 
     def __init__(
-        self,
-        base_dir: Union[Path, str],
-        compression: str = "snappy",
-        schema: Optional[pa.Schema] = None,
+            self,
+            base_dir: Union[Path, str],
+            compression: str = "snappy",
+            schema: Optional[pa.Schema] = None,
     ) -> None:
         super().__init__(base_dir)
         self.compression = compression
@@ -107,12 +107,12 @@ class ParquetAdapter(BaseFileAdapter):
     # ── BaseFileAdapter overrides ──────────────────────────────────────
 
     def write(
-        self,
-        data: List[Dict[str, Any]],
-        filename: str,
-        *,
-        schema: Optional[pa.Schema] = None,
-        **kwargs,
+            self,
+            data: List[Dict[str, Any]],
+            filename: str,
+            *,
+            schema: Optional[pa.Schema] = None,
+            **kwargs,
     ) -> Path:
         """
         Write a list of record dicts to a new Parquet file.
@@ -136,12 +136,12 @@ class ParquetAdapter(BaseFileAdapter):
         return output_path
 
     def read(
-        self,
-        filename: str,
-        *,
-        columns: Optional[List[str]] = None,
-        filters: Optional[List] = None,
-        **kwargs,
+            self,
+            filename: str,
+            *,
+            columns: Optional[List[str]] = None,
+            filters: Optional[List] = None,
+            **kwargs,
     ) -> pd.DataFrame:
         """
         Read a Parquet file into a pandas DataFrame.
@@ -159,12 +159,12 @@ class ParquetAdapter(BaseFileAdapter):
         return table.to_pandas()
 
     def append(
-        self,
-        data: List[Dict[str, Any]],
-        filename: str,
-        *,
-        schema: Optional[pa.Schema] = None,
-        **kwargs,
+            self,
+            data: List[Dict[str, Any]],
+            filename: str,
+            *,
+            schema: Optional[pa.Schema] = None,
+            **kwargs,
     ) -> Path:
         """
         Append rows to an existing Parquet file, or create if absent.
@@ -196,11 +196,11 @@ class ParquetAdapter(BaseFileAdapter):
     # ── Image helpers ──────────────────────────────────────────────────
 
     def read_images(
-        self,
-        filename: str,
-        *,
-        columns: Optional[List[str]] = None,
-        filter_result: Optional[str] = "YES",
+            self,
+            filename: str,
+            *,
+            columns: Optional[List[str]] = None,
+            filter_result: Optional[str] = "YES",
     ) -> Iterator[Dict[str, Any]]:
         """
         Yield one record dict per row, each with a ``pil_image`` key.
@@ -229,11 +229,11 @@ class ParquetAdapter(BaseFileAdapter):
             yield record
 
     def read_raw_input(
-        self,
-        filename: str,
-        *,
-        id_col: str = "id",
-        bytes_col: str = "data",
+            self,
+            filename: str,
+            *,
+            id_col: str = "id",
+            bytes_col: str = "data",
     ) -> Iterator[Dict[str, Any]]:
         """
         Read a minimal raw-input Parquet file with only id + bytes columns.
@@ -268,10 +268,28 @@ class ParquetAdapter(BaseFileAdapter):
             record_id = str(record.pop(id_col))
             raw: Optional[bytes] = record.pop(bytes_col, None)
 
+            # HuggingFace datasets store images as {"bytes": b"...", "path": "..."}.
+            # Use explicit `is not None` check — NOT `or` — because b"" is falsy
+            # and would cause valid-but-empty bytes to fall through to the wrong key.
             if isinstance(raw, dict):
-                raw = raw.get("bytes") or raw.get("data")
+                hf_bytes = raw.get("bytes")
+                raw = hf_bytes if hf_bytes is not None else raw.get("data")
 
-            raw: Optional[bytes] = raw if isinstance(raw, (bytes, bytearray)) else None
+            # pandas may return memoryview or numpy bytes scalars — normalise all to bytes.
+            if isinstance(raw, memoryview):
+                raw = bytes(raw)
+            elif hasattr(raw, "tobytes"):  # numpy scalar / bytearray subclass
+                raw = raw.tobytes()
+
+            raw = raw if isinstance(raw, (bytes, bytearray)) else None
+
+            if raw is None and record.get(bytes_col) is not None:
+                original_type = type(record.get(bytes_col, raw)).__name__
+                logger.warning(
+                    "id=%s: could not extract bytes from column '%s' "
+                    "(type=%s) — image will be skipped",
+                    record_id, bytes_col, original_type,
+                )
 
             record["id"] = record_id
             record["image_bytes"] = raw
@@ -300,12 +318,12 @@ class ParquetAdapter(BaseFileAdapter):
             yield record
 
     def merge_shards(
-        self,
-        output_filename: str,
-        pattern: str = "shard-*.parquet",
-        *,
-        schema: Optional[pa.Schema] = None,
-        delete_originals: bool = False,
+            self,
+            output_filename: str,
+            pattern: str = "shard-*.parquet",
+            *,
+            schema: Optional[pa.Schema] = None,
+            delete_originals: bool = False,
     ) -> Path:
         """Concatenate all shards matching *pattern* into one file."""
         shard_paths = self.list_files(pattern)
@@ -332,7 +350,7 @@ class ParquetAdapter(BaseFileAdapter):
 
     @staticmethod
     def build_filter_input_record(
-        raw_record: Dict[str, Any],
+            raw_record: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Build a normalised input record for the filter stage from a raw Parquet record.
@@ -367,10 +385,10 @@ class ParquetAdapter(BaseFileAdapter):
 
     @staticmethod
     def build_filter_output_record(
-        input_record: Dict[str, Any],
-        filter_result: str,
-        *,
-        error: Optional[str] = None,
+            input_record: Dict[str, Any],
+            filter_result: str,
+            *,
+            error: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Build a FILTER_OUTPUT_SCHEMA row from an input record + filter result.
@@ -393,8 +411,8 @@ class ParquetAdapter(BaseFileAdapter):
 
     @staticmethod
     def build_label_output_record(
-        filter_record: Dict[str, Any],
-        label_fields: Dict[str, Any],
+            filter_record: Dict[str, Any],
+            label_fields: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Build a LABEL_OUTPUT_SCHEMA row from a filter record + label fields.
