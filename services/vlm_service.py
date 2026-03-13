@@ -15,6 +15,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
+from transformers import Qwen3VLForConditionalGeneration
 
 import torch
 from PIL import Image
@@ -254,31 +255,8 @@ class VLMService:
         )
         if self._use_device_map:
             common_kwargs["device_map"] = "auto"
-
-        # Detect Qwen2.5-VL by model ID to use its dedicated class.
-        # Any other model (Qwen3-VL, LLaVA, InternVL, …) uses Auto.
-        _mid_lower = self.model_id.lower()
-        _is_qwen25_vl = "qwen2.5-vl" in _mid_lower or "qwen2_5_vl" in _mid_lower
-
-        if _is_qwen25_vl:
-            try:
-                from transformers import Qwen2_5_VLForConditionalGeneration
-
-                model = Qwen2_5_VLForConditionalGeneration.from_pretrained(self.model_id, **common_kwargs)
-                logger.debug("Loaded via Qwen2_5_VLForConditionalGeneration")
-            except (ImportError, OSError, ValueError) as exc:
-                logger.warning("Qwen2_5_VLForConditionalGeneration failed (%s), falling back to Auto", exc)
-                from transformers import AutoModelForVision2Seq
-
-                model = AutoModelForVision2Seq.from_pretrained(self.model_id, **common_kwargs)
-                logger.debug("Loaded via AutoModelForVision2Seq (fallback)")
-        else:
-            # For Qwen3-VL and all other VLMs use Auto so transformers picks
-            # the correct architecture class from the model's config.json.
-            from transformers import AutoModelForVision2Seq
-
-            model = AutoModelForVision2Seq.from_pretrained(self.model_id, **common_kwargs)
-            logger.debug("Loaded via AutoModelForVision2Seq")
+        
+        model = Qwen3VLForConditionalGeneration.from_pretrained(self.model_id, **common_kwargs)
 
         # When not using device_map, move model to the exact requested device
         if not self._use_device_map:
