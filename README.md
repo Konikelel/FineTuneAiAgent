@@ -80,13 +80,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # edit .env — set HF_TOKEN, ROOT_DIR, CUDA_DEVICE, etc.
 
-# 3a. Image files mode (default)
-mkdir -p data/raw
-cp /your/photos/*.jpg data/raw/
-python -m pipeline.main
-
-# 3b. Parquet input mode (existing id + bytes dataset)
-# set in .env:  INPUT_SOURCE_TYPE=parquet  INPUT_DIR=/path/to/parquets
+# set in .env:  INPUT_DIR=/path/to/parquets
 python -m pipeline.main
 
 # Run individual stages
@@ -130,12 +124,11 @@ on a multi-GPU machine — one instance per card.
 
 ### Input source
 
-| Variable            | Default        | Description                                                |
-| ------------------- | -------------- | ---------------------------------------------------------- |
-| `INPUT_SOURCE_TYPE` | `files`        | `files` = scan folder for images; `parquet` = read Parquet |
-| `INPUT_DIR`         | `ROOT_DIR/raw` | Source folder (images or Parquet files)                    |
-| `INPUT_ID_COL`      | `id`           | ID column name in raw Parquet input                        |
-| `INPUT_BYTES_COL`   | `data`         | Bytes column name in raw Parquet input                     |
+| Variable          | Default        | Description                             |
+| ----------------- | -------------- | --------------------------------------- |
+| `INPUT_DIR`       | `ROOT_DIR/raw` | Source folder (images or Parquet files) |
+| `INPUT_ID_COL`    | `id`           | ID column name in raw Parquet input     |
+| `INPUT_BYTES_COL` | `data`         | Bytes column name in raw Parquet input  |
 
 **Parquet input mode** supports minimal datasets with only `id (varchar)` + a bytes column.
 No other columns are required — dimensions and PIL image are decoded automatically.
@@ -168,8 +161,6 @@ No other columns are required — dimensions and PIL image are decoded automatic
 ## Per-stage Parquet schemas
 
 ### FILTER_INPUT_SCHEMA — raw input (minimal)
-
-Used when `INPUT_SOURCE_TYPE=parquet`. Only two columns are required in the source file:
 
 | Column | Type   | Notes             |
 | ------ | ------ | ----------------- |
