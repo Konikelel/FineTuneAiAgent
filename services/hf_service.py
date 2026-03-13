@@ -1,96 +1,57 @@
 """
-Hugging Face Repository Import / Export Service
-------------------------------------------------
-Can be used in three ways:
-
-1. Programmatic — recommended for larger projects
-   -----------------------------------------------
-   from hf_service import HFService
-
-   svc = HFService(token="hf_...", repo_id="user/reddit-images")
-
-   result = svc.export(
-       local_dir="./images",
-       repo_path="data/train",
-   )
-   print(result.uploaded)       # list of HF paths that were uploaded
-
-   result = svc.import_data(
-       repo_path="data/train",
-       local_dir="./images",
-   )
-   print(result.downloaded_to)  # absolute local directory path
-   print(result.files)          # list of downloaded relative paths
-
-2. Standalone helpers — no class needed
-   -----------------------------------------------
-   from hf_service import export_to_hf, import_from_hf
-
-   export_to_hf(token="hf_...", repo_id="user/reddit-images",
-                local_dir="./images", repo_path="data/train")
-
-   import_from_hf(token="hf_...", repo_id="user/reddit-images",
-                  repo_path="data/train", local_dir="./images")
-
-3. CLI — reads defaults from .env, all flags optional
-   -----------------------------------------------
-   python hf_service.py export [--repo ...] [--path ...] [--local-dir ...]
-   python hf_service.py import [--repo ...] [--path ...] [--local-dir ...]
-   python hf_service.py info   [--repo ...]
+services/hf_service.py
+───────────────────────
+Reusable Hugging Face import/export services.
+Provides programmatic access (HFService class, export_to_hf, import_from_hf)
+and a CLI interface for standalone usage. All parameters can be passed directly
+or fall back to .env values if omitted.
 """
 
 from __future__ import annotations
 
-import os
-import sys
 import argparse
 import logging
+import os
 import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from dotenv import load_dotenv
-from huggingface_hub import HfApi, snapshot_download, login
-from huggingface_hub.utils import RepositoryNotFoundError, EntryNotFoundError
+from huggingface_hub import HfApi, login, snapshot_download
+from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 log = logging.getLogger(__name__)
-if not log.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
 
 
 # ── Result dataclasses ─────────────────────────────────────────────────────────
 @dataclass
 class ExportResult:
     """Returned by HFService.export() / export_to_hf()"""
-    repo_id:   str
+
+    repo_id: str
     repo_path: str
     local_dir: str
-    uploaded:  List[str] = field(default_factory=list)  # HF paths uploaded
+    uploaded: List[str] = field(default_factory=list)  # HF paths uploaded
 
     @property
     def count(self) -> int:
         return len(self.uploaded)
 
     def __repr__(self) -> str:
-        return (
-            f"ExportResult(repo='{self.repo_id}/{self.repo_path}', "
-            f"uploaded={self.count} file(s))"
-        )
+        return f"ExportResult(repo='{self.repo_id}/{self.repo_path}', " f"uploaded={self.count} file(s))"
 
 
 @dataclass
 class ImportResult:
     """Returned by HFService.import_data() / import_from_hf()"""
-    repo_id:        str
-    repo_path:      str
-    downloaded_to:  str                                   # absolute local path
-    files:          List[str] = field(default_factory=list)  # relative paths
+
+    repo_id: str
+    repo_path: str
+    downloaded_to: str  # absolute local path
+    files: List[str] = field(default_factory=list)  # relative paths
 
     @property
     def count(self) -> int:
@@ -106,12 +67,13 @@ class ImportResult:
 @dataclass
 class RepoInfo:
     """Returned by HFService.info()"""
-    id:            str
-    repo_type:     str
-    private:       bool
-    downloads:     int
+
+    id: str
+    repo_type: str
+    private: bool
+    downloads: int
     last_modified: str
-    files:         List[str] = field(default_factory=list)
+    files: List[str] = field(default_factory=list)
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────
@@ -119,12 +81,12 @@ def _load_env_defaults() -> dict:
     """Load default values from .env (if present). Never raises."""
     load_dotenv()
     return {
-        "token":     os.getenv("HF_TOKEN", ""),
-        "repo_id":   os.getenv("HF_REPO_ID", ""),
+        "token": os.getenv("HF_TOKEN", ""),
+        "repo_id": os.getenv("HF_REPO_ID", ""),
         "repo_type": os.getenv("HF_REPO_TYPE", "dataset"),
         "data_path": os.getenv("HF_DATA_PATH", "data/train"),
         "local_dir": os.getenv("LOCAL_DATA_DIR", "./local_data"),
-        "revision":  os.getenv("HF_REVISION", "main"),
+        "revision": os.getenv("HF_REVISION", "main"),
     }
 
 
@@ -148,27 +110,25 @@ class HFService:
     """
 
     def __init__(
-            self,
-            token:     Optional[str] = None,
-            repo_id:   Optional[str] = None,
-            repo_type: Optional[str] = None,
-            revision:  Optional[str] = None,
-            data_path: Optional[str] = None,
-            local_dir: Optional[str] = None,
+        self,
+        token: Optional[str] = None,
+        repo_id: Optional[str] = None,
+        repo_type: Optional[str] = None,
+        revision: Optional[str] = None,
+        data_path: Optional[str] = None,
+        local_dir: Optional[str] = None,
     ):
         env = _load_env_defaults()
 
-        self.token     = token     or env["token"]
-        self.repo_id   = repo_id   or env["repo_id"]
+        self.token = token or env["token"]
+        self.repo_id = repo_id or env["repo_id"]
         self.repo_type = repo_type or env["repo_type"] or "dataset"
-        self.revision  = revision  or env["revision"]  or "main"
+        self.revision = revision or env["revision"] or "main"
         self.data_path = data_path or env["data_path"] or "data/train"
         self.local_dir = local_dir or env["local_dir"] or "./local_data"
 
         if not self.token:
-            raise ValueError(
-                "HF token is required. Pass token= or set HF_TOKEN in .env"
-            )
+            raise ValueError("HF token is required. Pass token= or set HF_TOKEN in .env")
 
         self.api = HfApi(token=self.token)
         login(token=self.token, add_to_git_credential=False)
@@ -176,10 +136,10 @@ class HFService:
 
     # ── INFO ──────────────────────────────────────────────────────────────────
     def info(
-            self,
-            repo_id:   Optional[str] = None,
-            repo_type: Optional[str] = None,
-            revision:  Optional[str] = None,
+        self,
+        repo_id: Optional[str] = None,
+        repo_type: Optional[str] = None,
+        revision: Optional[str] = None,
     ) -> RepoInfo:
         """
         Return metadata about a remote repository.
@@ -199,9 +159,9 @@ class HFService:
         RepositoryNotFoundError
         ValueError if repo_id is empty
         """
-        rid  = repo_id   or self.repo_id
+        rid = repo_id or self.repo_id
         rtyp = repo_type or self.repo_type
-        rev  = revision  or self.revision
+        rev = revision or self.revision
 
         if not rid:
             raise ValueError("repo_id is required for info()")
@@ -213,9 +173,7 @@ class HFService:
                 else self.api.model_info(rid, revision=rev)
             )
         except RepositoryNotFoundError:
-            raise RepositoryNotFoundError(
-                f"Repository '{rid}' not found or no access."
-            )
+            raise RepositoryNotFoundError(f"Repository '{rid}' not found or no access.")
 
         siblings = getattr(meta, "siblings", []) or []
         return RepoInfo(
@@ -229,14 +187,14 @@ class HFService:
 
     # ── EXPORT (local → HF) ───────────────────────────────────────────────────
     def export(
-            self,
-            local_dir:      Optional[str]             = None,
-            repo_path:      Optional[str]             = None,
-            repo_id:        Optional[str]             = None,
-            repo_type:      Optional[str]             = None,
-            commit_message: Optional[str]             = None,
-            private:        bool                      = True,
-            file_filter:    Optional[Callable[[Path], bool]] = None,
+        self,
+        local_dir: Optional[str] = None,
+        repo_path: Optional[str] = None,
+        repo_id: Optional[str] = None,
+        repo_type: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        private: bool = True,
+        file_filter: Optional[Callable[[Path], bool]] = None,
     ) -> ExportResult:
         """
         Upload files from a local directory to the HF repository.
@@ -265,10 +223,10 @@ class HFService:
         FileNotFoundError  if local_dir does not exist
         ValueError         if repo_id is empty
         """
-        ldir  = Path(local_dir or self.local_dir)
+        ldir = Path(local_dir or self.local_dir)
         rpath = repo_path or self.data_path
-        rid   = repo_id   or self.repo_id
-        rtyp  = repo_type or self.repo_type
+        rid = repo_id or self.repo_id
+        rtyp = repo_type or self.repo_type
 
         if not rid:
             raise ValueError("repo_id is required. Pass repo_id= or set HF_REPO_ID in .env")
@@ -285,7 +243,10 @@ class HFService:
 
         log.info(
             "Exporting %d file(s) from '%s' → %s/%s",
-            len(files), ldir, rid, rpath,
+            len(files),
+            ldir,
+            rid,
+            rpath,
         )
 
         # Ensure repo exists — create if missing
@@ -297,9 +258,9 @@ class HFService:
 
         uploaded: List[str] = []
         for local_path in files:
-            rel     = local_path.relative_to(ldir)
+            rel = local_path.relative_to(ldir)
             hf_path = f"{rpath}/{rel}".replace("\\", "/")
-            msg     = commit_message or f"Upload {hf_path}"
+            msg = commit_message or f"Upload {hf_path}"
 
             log.info("  ↑ %s → %s", rel, hf_path)
             self.api.upload_file(
@@ -322,14 +283,14 @@ class HFService:
 
     # ── IMPORT (HF → local) ───────────────────────────────────────────────────
     def import_data(
-            self,
-            local_dir:       Optional[str]       = None,
-            repo_path:       Optional[str]       = None,
-            repo_id:         Optional[str]       = None,
-            repo_type:       Optional[str]       = None,
-            revision:        Optional[str]       = None,
-            allow_patterns:  Optional[List[str]] = None,
-            ignore_patterns: Optional[List[str]] = None,
+        self,
+        local_dir: Optional[str] = None,
+        repo_path: Optional[str] = None,
+        repo_id: Optional[str] = None,
+        repo_type: Optional[str] = None,
+        revision: Optional[str] = None,
+        allow_patterns: Optional[List[str]] = None,
+        ignore_patterns: Optional[List[str]] = None,
     ) -> ImportResult:
         """
         Download files from the HF repository into a local directory.
@@ -359,11 +320,11 @@ class HFService:
         EntryNotFoundError       if repo_path not found in the repo
         ValueError               if repo_id is empty
         """
-        ldir  = Path(local_dir or self.local_dir)
+        ldir = Path(local_dir or self.local_dir)
         rpath = repo_path or self.data_path
-        rid   = repo_id   or self.repo_id
-        rtyp  = repo_type or self.repo_type
-        rev   = revision  or self.revision
+        rid = repo_id or self.repo_id
+        rtyp = repo_type or self.repo_type
+        rev = revision or self.revision
 
         if not rid:
             raise ValueError("repo_id is required. Pass repo_id= or set HF_REPO_ID in .env")
@@ -373,7 +334,11 @@ class HFService:
         patterns = allow_patterns or [f"{rpath}/*"]
         log.info(
             "Importing %s/%s → '%s' (patterns=%s, revision=%s)",
-            rid, rpath, ldir, patterns, rev,
+            rid,
+            rpath,
+            ldir,
+            patterns,
+            rev,
         )
 
         try:
@@ -387,13 +352,9 @@ class HFService:
                 token=self.token,
             )
         except RepositoryNotFoundError:
-            raise RepositoryNotFoundError(
-                f"Repository '{rid}' not found or no access."
-            )
+            raise RepositoryNotFoundError(f"Repository '{rid}' not found or no access.")
         except EntryNotFoundError:
-            raise EntryNotFoundError(
-                f"Path '{rpath}' not found in repo '{rid}'."
-            )
+            raise EntryNotFoundError(f"Path '{rpath}' not found in repo '{rid}'.")
 
         # snapshot_download preserves the full repo structure, e.g.:
         #   local_dir/data/train/shard-00000.parquet
@@ -413,9 +374,7 @@ class HFService:
                 shutil.rmtree(str(top_nested))
 
         base = ldir
-        downloaded_files = [
-            str(f.relative_to(base)) for f in base.rglob("*") if f.is_file()
-        ]
+        downloaded_files = [str(f.relative_to(base)) for f in base.rglob("*") if f.is_file()]
 
         result = ImportResult(
             repo_id=rid,
@@ -429,30 +388,17 @@ class HFService:
 
 # ── Standalone helper functions ────────────────────────────────────────────────
 def export_to_hf(
-        token:          str,
-        repo_id:        str,
-        local_dir:      str,
-        repo_path:      str                             = "data/train",
-        repo_type:      str                             = "dataset",
-        commit_message: Optional[str]                  = None,
-        private:        bool                           = True,
-        file_filter:    Optional[Callable[[Path], bool]] = None,
+    token: str,
+    repo_id: str,
+    local_dir: str,
+    repo_path: str = "data/train",
+    repo_type: str = "dataset",
+    commit_message: Optional[str] = None,
+    private: bool = True,
+    file_filter: Optional[Callable[[Path], bool]] = None,
 ) -> ExportResult:
     """
     One-shot export — no need to manage an HFService instance.
-
-    Example
-    -------
-    from hf_service import export_to_hf
-
-    result = export_to_hf(
-        token="hf_...",
-        repo_id="user/reddit-images",
-        local_dir="./images",
-        repo_path="data/train",
-        file_filter=lambda p: p.suffix in (".jpg", ".png"),
-    )
-    print(result.uploaded)
     """
     svc = HFService(token=token, repo_id=repo_id, repo_type=repo_type)
     return svc.export(
@@ -465,30 +411,17 @@ def export_to_hf(
 
 
 def import_from_hf(
-        token:           str,
-        repo_id:         str,
-        local_dir:       str,
-        repo_path:       str               = "data/train",
-        repo_type:       str               = "dataset",
-        revision:        str               = "main",
-        allow_patterns:  Optional[List[str]] = None,
-        ignore_patterns: Optional[List[str]] = None,
+    token: str,
+    repo_id: str,
+    local_dir: str,
+    repo_path: str = "data/train",
+    repo_type: str = "dataset",
+    revision: str = "main",
+    allow_patterns: Optional[List[str]] = None,
+    ignore_patterns: Optional[List[str]] = None,
 ) -> ImportResult:
     """
     One-shot import — no need to manage an HFService instance.
-
-    Example
-    -------
-    from hf_service import import_from_hf
-
-    result = import_from_hf(
-        token="hf_...",
-        repo_id="user/reddit-images",
-        local_dir="./images",
-        repo_path="data/train",
-        ignore_patterns=["*.md", ".gitattributes"],
-    )
-    print(result.files)
     """
     svc = HFService(token=token, repo_id=repo_id, repo_type=repo_type, revision=revision)
     return svc.import_data(
@@ -509,8 +442,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--repo",      help="Override HF_REPO_ID")
-    shared.add_argument("--path",      help="Override HF_DATA_PATH  (e.g. data/train)")
+    shared.add_argument("--token", help="HuggingFace access token (overrides HF_TOKEN in .env)")
+    shared.add_argument("--repo", help="Override HF_REPO_ID")
+    shared.add_argument("--path", help="Override HF_DATA_PATH  (e.g. data/train)")
     shared.add_argument("--local-dir", dest="local_dir", help="Override LOCAL_DATA_DIR")
     shared.add_argument("--repo-type", dest="repo_type", help="dataset | model")
 
@@ -519,11 +453,9 @@ def _build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--public", action="store_true", help="Create repo as public")
 
     imp = sub.add_parser("import", parents=[shared], help="Download HF repo → local files")
-    imp.add_argument("--revision",        help="Override HF_REVISION (branch/tag)")
-    imp.add_argument("--allow-patterns",  dest="allow_patterns",  nargs="*",
-                     help="Glob patterns to include")
-    imp.add_argument("--ignore-patterns", dest="ignore_patterns", nargs="*",
-                     help="Glob patterns to exclude")
+    imp.add_argument("--revision", help="Override HF_REVISION (branch/tag)")
+    imp.add_argument("--allow-patterns", dest="allow_patterns", nargs="*", help="Glob patterns to include")
+    imp.add_argument("--ignore-patterns", dest="ignore_patterns", nargs="*", help="Glob patterns to exclude")
 
     inf = sub.add_parser("info", parents=[shared], help="Print repo metadata")
     inf.add_argument("--revision", help="Branch / tag")
@@ -533,31 +465,32 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _cli_main():
     parser = _build_parser()
-    args   = parser.parse_args()
-    env    = _load_env_defaults()
+    args = parser.parse_args()
+    env = _load_env_defaults()
 
     try:
         svc = HFService(
-            repo_id   = getattr(args, "repo",      None) or env["repo_id"],
-            repo_type = getattr(args, "repo_type", None) or env["repo_type"],
+            token=getattr(args, "token", None) or env.get("token"),
+            repo_id=getattr(args, "repo", None) or env.get("repo_id"),
+            repo_type=getattr(args, "repo_type", None) or env.get("repo_type"),
         )
 
         if args.command == "export":
             result = svc.export(
-                local_dir      = args.local_dir,
-                repo_path      = args.path,
-                commit_message = args.commit_msg,
-                private        = not args.public,
+                local_dir=args.local_dir,
+                repo_path=args.path,
+                commit_message=args.commit_msg,
+                private=not args.public,
             )
             print(result)
 
         elif args.command == "import":
             result = svc.import_data(
-                local_dir       = args.local_dir,
-                repo_path       = args.path,
-                revision        = args.revision,
-                allow_patterns  = args.allow_patterns,
-                ignore_patterns = args.ignore_patterns,
+                local_dir=args.local_dir,
+                repo_path=args.path,
+                revision=args.revision,
+                allow_patterns=args.allow_patterns,
+                ignore_patterns=args.ignore_patterns,
             )
             print(result)
 

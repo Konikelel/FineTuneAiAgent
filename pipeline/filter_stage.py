@@ -3,11 +3,11 @@ pipeline/filter_stage.py
 ────────────────────────
 Stage 1 — Binary quality filter.
 
-Input  : raw image (Path / PIL / bytes)
-Output : bool (True = keep / YES, False = discard / NO)
+Input  : Raw image (Path / PIL / bytes)
+Output : Boolean (True = keep / YES, False = discard / NO)
 
-The stage does NOT read/write Parquet itself — that is the
-responsibility of the pipeline orchestrator (main.py).
+This module handles VLM inference ONLY. Reading and writing to Parquet
+is strictly handled by the pipeline orchestrator loop in main.py.
 """
 
 from __future__ import annotations
@@ -41,21 +41,31 @@ class FilterStage:
         vlm: VLMService,
         *,
         system_prompt: str = FILTER_SYSTEM_PROMPT,
-        user_prompt: str   = FILTER_USER_PROMPT,
+        user_prompt: str = FILTER_USER_PROMPT,
     ) -> None:
-        self.vlm           = vlm
+        self.vlm = vlm
         self.system_prompt = system_prompt
-        self.user_prompt   = user_prompt
+        self.user_prompt = user_prompt
 
     def run(self, image: Union[Path, str, bytes, Image.Image]) -> bool:
         """
-        Ask the VLM whether the image should be kept.
+        Ask the Vision-Language Model whether the image meets quality standards.
+
+        Parameters
+        ----------
+        image : Path, str, bytes, or PIL.Image.Image
+            The image to evaluate.
 
         Returns
         -------
         bool
-            True  → keep (model answered "YES")
-            False → discard
+            True if the model responds starting with "YES" (keep the image).
+            False if the model responds starting with "NO" (discard the image).
+
+        Raises
+        ------
+        Exception
+            If the VLM Service fails to generate a response after all retry attempts.
         """
         try:
             answer: str = self.vlm.generate(

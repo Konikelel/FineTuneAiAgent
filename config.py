@@ -7,10 +7,10 @@ All secrets and paths live here — loaded from .env via pydantic-settings.
 Per-stage directory layout (auto-derived from ROOT_DIR):
 
     ROOT_DIR/
-    ├── raw/                    ← raw input images (INPUT_DIR default)
+    ├── raw/                    ← raw input parquet files (INPUT_DIR default)
     ├── stages/
     │   ├── filter/
-    │   │   ├── input/          ← symlink / copy of raw (or same as INPUT_DIR)
+    │   │   ├── input/          ← reads from raw input parquet files
     │   │   └── output/         ← filter stage parquet shards
     │   └── label/
     │       ├── input/          ← reads from filter/output
@@ -70,29 +70,18 @@ class Settings(BaseSettings):
         default=Path("./data"),
         description="Root directory — all stage dirs are derived from this",
     )
+    # ── Input source (Parquet only) ────────────────────────────────────
     INPUT_DIR: Optional[Path] = Field(
         default=None,
-        description="Raw images folder (files mode) or folder with input parquet files (parquet mode). "
-                    "Defaults to ROOT_DIR/raw if not set.",
-    )
-
-    # ── Input source type ──────────────────────────────────────────────
-    INPUT_SOURCE_TYPE: str = Field(
-        default="files",
-        description=(
-            "How to read input data:\n"
-            "  'files'   — scan INPUT_DIR for image files (jpg/png/…)\n"
-            "  'parquet' — read Parquet files from INPUT_DIR "
-            "              (schema: id varchar, <bytes_col> binary)"
-        ),
+        description="Folder containing raw input Parquet files. " "Defaults to ROOT_DIR/raw if not set.",
     )
     INPUT_ID_COL: str = Field(
         default="id",
-        description="Column name for the record ID in raw Parquet input.",
+        description="Column name for the record identifier in raw Parquet input.",
     )
     INPUT_BYTES_COL: str = Field(
         default="data",
-        description="Column name for the image bytes in raw Parquet input.",
+        description="Column name for the raw image bytes in raw Parquet input.",
     )
 
     # ── Batching / sharding ────────────────────────────────────────────
@@ -113,9 +102,9 @@ class Settings(BaseSettings):
     )
 
     # ── Retry ──────────────────────────────────────────────────────────
-    VLM_MAX_ATTEMPTS: int   = Field(default=3)
+    VLM_MAX_ATTEMPTS: int = Field(default=3)
     VLM_BACKOFF_BASE: float = Field(default=4.0)
-    VLM_BACKOFF_MAX:  float = Field(default=60.0)
+    VLM_BACKOFF_MAX: float = Field(default=60.0)
 
     # ── Derived paths (computed, not from .env) ────────────────────────
 
@@ -126,7 +115,7 @@ class Settings(BaseSettings):
     # Filter stage
     @property
     def filter_input_dir(self) -> Path:
-        """Filter reads raw images from the global input_dir."""
+        """Filter reads raw parquet shards from the global input_dir."""
         return self.input_dir
 
     @property
@@ -158,6 +147,6 @@ class Settings(BaseSettings):
             self.filter_output_dir,
             self.label_output_dir,
             self.ROOT_DIR / "checkpoints",
-            ]
+        ]
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)

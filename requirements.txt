@@ -13,6 +13,9 @@ tiktoken>=0.7.0
 pyarrow>=16.0.0
 pandas>=2.2.0
 
+# HuggingFace Hub
+huggingface_hub>=0.23.0
+
 # Config / env
 pydantic>=2.7.0
 pydantic-settings>=2.3.0

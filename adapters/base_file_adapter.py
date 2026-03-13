@@ -1,6 +1,6 @@
 """
-core/base_file_adapter.py
-─────────────────────────
+adapters/base_file_adapter.py
+─────────────────────────────
 Abstract base class for all file I/O adapters.
 Drop-in for any project — CSV, JSON, Parquet, etc.
 """
@@ -33,27 +33,98 @@ class BaseFileAdapter(ABC):
 
     @abstractmethod
     def write(self, data: Any, filename: str, **kwargs) -> Path:
-        """Persist *data* to *filename* inside base_dir. Returns full path."""
+        """
+        Persist data to a file inside the base directory.
+
+        Parameters
+        ----------
+        data : Any
+            The data to be written (e.g., list of dicts).
+        filename : str
+            The target filename (e.g., "shard-00001.parquet").
+        **kwargs
+            Optional arguments (e.g., schema) specific to the implementation.
+
+        Returns
+        -------
+        Path
+            The absolute path to the written file.
+        """
         ...
 
     @abstractmethod
     def read(self, filename: str, **kwargs) -> Any:
-        """Load *filename* from base_dir and return its content."""
+        """
+        Load data from a file inside the base directory.
+
+        Parameters
+        ----------
+        filename : str
+            The target filename to read from.
+        **kwargs
+            Optional arguments (e.g., columns, filters) specific to the
+            implementation.
+
+        Returns
+        -------
+        Any
+            The loaded data (e.g., a pandas DataFrame or list of dicts).
+        """
         ...
 
     @abstractmethod
     def append(self, data: Any, filename: str, **kwargs) -> Path:
-        """Append *data* to an existing file (or create if absent)."""
+        """
+        Append data to an existing file, creating it if it doesn't exist.
+
+        Parameters
+        ----------
+        data : Any
+            The data to append.
+        filename : str
+            The target filename.
+        **kwargs
+            Optional arguments specific to the implementation.
+
+        Returns
+        -------
+        Path
+            The absolute path to the modified file.
+        """
         ...
 
     @abstractmethod
     def exists(self, filename: str) -> bool:
-        """Return True when *filename* is present in base_dir."""
+        """
+        Check if a file exists inside the base directory.
+
+        Parameters
+        ----------
+        filename : str
+            The target filename to check.
+
+        Returns
+        -------
+        bool
+            True if the file exists, False otherwise.
+        """
         ...
 
     @abstractmethod
     def list_files(self, pattern: str = "*") -> List[Path]:
-        """Return sorted list of Paths matching *pattern* inside base_dir."""
+        """
+        List all files matching a glob pattern inside the base directory.
+
+        Parameters
+        ----------
+        pattern : str, optional
+            The glob pattern to match (default is "*").
+
+        Returns
+        -------
+        List[Path]
+            A sorted list of absolute Paths matching the pattern.
+        """
         ...
 
     # ── Concrete helpers ───────────────────────────────────────────────

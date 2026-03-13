@@ -1,25 +1,12 @@
 """
 adapters/parquet_adapter.py
 ───────────────────────────
-Parquet file adapter — reusable in any project.
+Parquet file adapter for reading and writing large datasets.
 
-Three schemas are defined for this pipeline:
-  • FILTER_INPUT_SCHEMA   — raw image rows fed into the filter stage
-  • FILTER_OUTPUT_SCHEMA  — filter result rows (YES keeps bytes; NO is metadata-only)
-  • LABEL_OUTPUT_SCHEMA   — fully labelled rows (final output)
-
-Usage in other projects
-───────────────────────
-    from adapters.parquet_adapter import ParquetAdapter
-    import pyarrow as pa
-
-    adapter = ParquetAdapter("/data/output", compression="zstd")
-    adapter.write(rows, "batch-001.parquet")          # uses default schema
-    df = adapter.read("batch-001.parquet")
-
-    # Custom schema
-    my_schema = pa.schema([pa.field("id", pa.string()), pa.field("value", pa.float32())])
-    adapter.write(rows, "custom.parquet", schema=my_schema)
+Defines schemas for the filtering and labeling stages:
+  • FILTER_INPUT_SCHEMA
+  • FILTER_OUTPUT_SCHEMA
+  • LABEL_OUTPUT_SCHEMA
 """
 
 from __future__ import annotations
@@ -36,7 +23,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from PIL import Image
 
-from core.base_file_adapter import BaseFileAdapter
+from adapters.base_file_adapter import BaseFileAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -45,46 +32,52 @@ logger = logging.getLogger(__name__)
 # Raw input schema — minimal format: just id + image bytes.
 # This matches an existing Parquet source that only has these two columns.
 # Column name for bytes is configurable via read_raw_input() — defaults to "data".
-FILTER_INPUT_SCHEMA = pa.schema([
-    pa.field("id",   pa.string()),
-    pa.field("data", pa.binary()),
-])
+FILTER_INPUT_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string()),
+        pa.field("data", pa.binary()),
+    ]
+)
 
-FILTER_OUTPUT_SCHEMA = pa.schema([
-    pa.field("id",            pa.string()),
-    pa.field("file_name",     pa.string()),
-    pa.field("file_path",     pa.string()),
-    pa.field("image_bytes",   pa.binary()),  # NULL for filter_result=NO
-    pa.field("image_format",  pa.string()),
-    pa.field("width",         pa.int32()),
-    pa.field("height",        pa.int32()),
-    pa.field("filter_result", pa.string()),  # "YES" | "NO"
-    pa.field("processed_at",  pa.timestamp("ms", tz="UTC")),
-    pa.field("error",         pa.string()),  # NULL on success
-])
+FILTER_OUTPUT_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string()),
+        pa.field("file_name", pa.string()),
+        pa.field("file_path", pa.string()),
+        pa.field("image_bytes", pa.binary()),  # NULL for filter_result=NO
+        pa.field("image_format", pa.string()),
+        pa.field("width", pa.int32()),
+        pa.field("height", pa.int32()),
+        pa.field("filter_result", pa.string()),  # "YES" | "NO"
+        pa.field("processed_at", pa.timestamp("ms", tz="UTC")),
+        pa.field("error", pa.string()),  # NULL on success
+    ]
+)
 
-LABEL_OUTPUT_SCHEMA = pa.schema([
-    pa.field("id",               pa.string()),
-    pa.field("file_name",        pa.string()),
-    pa.field("file_path",        pa.string()),
-    pa.field("image_bytes",      pa.binary()),
-    pa.field("image_format",     pa.string()),
-    pa.field("width",            pa.int32()),
-    pa.field("height",           pa.int32()),
-    pa.field("filter_result",    pa.string()),
-    # ── label fields
-    pa.field("label_json",       pa.string()),  # raw VLM JSON for provenance
-    pa.field("category",         pa.string()),
-    pa.field("subcategory",      pa.string()),
-    pa.field("description",      pa.string()),
-    pa.field("landmark",         pa.string()),
-    pa.field("city",             pa.string()),
-    pa.field("mood",             pa.string()),
-    pa.field("is_professional",  pa.bool_()),
-    pa.field("has_text_overlay", pa.bool_()),
-    pa.field("processed_at",     pa.timestamp("ms", tz="UTC")),
-    pa.field("error",            pa.string()),
-])
+LABEL_OUTPUT_SCHEMA = pa.schema(
+    [
+        pa.field("id", pa.string()),
+        pa.field("file_name", pa.string()),
+        pa.field("file_path", pa.string()),
+        pa.field("image_bytes", pa.binary()),
+        pa.field("image_format", pa.string()),
+        pa.field("width", pa.int32()),
+        pa.field("height", pa.int32()),
+        pa.field("filter_result", pa.string()),
+        # ── label fields
+        pa.field("label_json", pa.string()),  # raw VLM JSON for provenance
+        pa.field("category", pa.string()),
+        pa.field("subcategory", pa.string()),
+        pa.field("description", pa.string()),
+        pa.field("landmark", pa.string()),
+        pa.field("city", pa.string()),
+        pa.field("mood", pa.string()),
+        pa.field("is_professional", pa.bool_()),
+        pa.field("has_text_overlay", pa.bool_()),
+        pa.field("processed_at", pa.timestamp("ms", tz="UTC")),
+        pa.field("error", pa.string()),
+    ]
+)
 
 
 class ParquetAdapter(BaseFileAdapter):
@@ -102,10 +95,10 @@ class ParquetAdapter(BaseFileAdapter):
     """
 
     def __init__(
-            self,
-            base_dir: Union[Path, str],
-            compression: str = "snappy",
-            schema: Optional[pa.Schema] = None,
+        self,
+        base_dir: Union[Path, str],
+        compression: str = "snappy",
+        schema: Optional[pa.Schema] = None,
     ) -> None:
         super().__init__(base_dir)
         self.compression = compression
@@ -114,12 +107,12 @@ class ParquetAdapter(BaseFileAdapter):
     # ── BaseFileAdapter overrides ──────────────────────────────────────
 
     def write(
-            self,
-            data: List[Dict[str, Any]],
-            filename: str,
-            *,
-            schema: Optional[pa.Schema] = None,
-            **kwargs,
+        self,
+        data: List[Dict[str, Any]],
+        filename: str,
+        *,
+        schema: Optional[pa.Schema] = None,
+        **kwargs,
     ) -> Path:
         """
         Write a list of record dicts to a new Parquet file.
@@ -143,12 +136,12 @@ class ParquetAdapter(BaseFileAdapter):
         return output_path
 
     def read(
-            self,
-            filename: str,
-            *,
-            columns: Optional[List[str]] = None,
-            filters: Optional[List] = None,
-            **kwargs,
+        self,
+        filename: str,
+        *,
+        columns: Optional[List[str]] = None,
+        filters: Optional[List] = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """
         Read a Parquet file into a pandas DataFrame.
@@ -166,12 +159,12 @@ class ParquetAdapter(BaseFileAdapter):
         return table.to_pandas()
 
     def append(
-            self,
-            data: List[Dict[str, Any]],
-            filename: str,
-            *,
-            schema: Optional[pa.Schema] = None,
-            **kwargs,
+        self,
+        data: List[Dict[str, Any]],
+        filename: str,
+        *,
+        schema: Optional[pa.Schema] = None,
+        **kwargs,
     ) -> Path:
         """
         Append rows to an existing Parquet file, or create if absent.
@@ -183,9 +176,7 @@ class ParquetAdapter(BaseFileAdapter):
 
         if self.exists(filename):
             existing_df = self.read(filename)
-            new_df = pd.DataFrame(
-                [self._fill_row(r, resolved_schema) for r in data]
-            )
+            new_df = pd.DataFrame([self._fill_row(r, resolved_schema) for r in data])
             merged = pd.concat([existing_df, new_df], ignore_index=True)
             table = pa.Table.from_pandas(merged, schema=resolved_schema, preserve_index=False)
         else:
@@ -205,11 +196,11 @@ class ParquetAdapter(BaseFileAdapter):
     # ── Image helpers ──────────────────────────────────────────────────
 
     def read_images(
-            self,
-            filename: str,
-            *,
-            columns: Optional[List[str]] = None,
-            filter_result: Optional[str] = "YES",
+        self,
+        filename: str,
+        *,
+        columns: Optional[List[str]] = None,
+        filter_result: Optional[str] = "YES",
     ) -> Iterator[Dict[str, Any]]:
         """
         Yield one record dict per row, each with a ``pil_image`` key.
@@ -217,13 +208,12 @@ class ParquetAdapter(BaseFileAdapter):
         Parameters
         ----------
         filename : parquet shard to iterate
-        columns : extra columns to load alongside image_bytes
+        columns : restrict to these columns; None = load all columns.
         filter_result : if set, only yield rows matching this value
                         (e.g. "YES"). Pass None to yield all rows.
         """
-        needed = list({*(columns or []), "id", "image_bytes", "filter_result"})
         filters = [("filter_result", "=", filter_result)] if filter_result else None
-        df = self.read(filename, columns=needed, filters=filters)
+        df = self.read(filename, columns=columns, filters=filters)
 
         for _, row in df.iterrows():
             record = row.to_dict()
@@ -232,19 +222,18 @@ class ParquetAdapter(BaseFileAdapter):
                 try:
                     record["pil_image"] = Image.open(io.BytesIO(raw)).convert("RGB")
                 except Exception as exc:
-                    logger.warning("Could not decode image bytes for %s: %s",
-                                   record.get("id"), exc)
+                    logger.warning("Could not decode image bytes for %s: %s", record.get("id"), exc)
                     record["pil_image"] = None
             else:
                 record["pil_image"] = None
             yield record
 
     def read_raw_input(
-            self,
-            filename: str,
-            *,
-            id_col: str = "id",
-            bytes_col: str = "data",
+        self,
+        filename: str,
+        *,
+        id_col: str = "id",
+        bytes_col: str = "data",
     ) -> Iterator[Dict[str, Any]]:
         """
         Read a minimal raw-input Parquet file with only id + bytes columns.
@@ -268,11 +257,9 @@ class ParquetAdapter(BaseFileAdapter):
         df = self.read(filename)
 
         if id_col not in df.columns:
-            raise ValueError(f"Column '{id_col}' not found in {filename}. "
-                             f"Available: {list(df.columns)}")
+            raise ValueError(f"Column '{id_col}' not found in {filename}. " f"Available: {list(df.columns)}")
         if bytes_col not in df.columns:
-            raise ValueError(f"Column '{bytes_col}' not found in {filename}. "
-                             f"Available: {list(df.columns)}")
+            raise ValueError(f"Column '{bytes_col}' not found in {filename}. " f"Available: {list(df.columns)}")
 
         for _, row in df.iterrows():
             record = row.to_dict()
@@ -286,41 +273,39 @@ class ParquetAdapter(BaseFileAdapter):
 
             raw: Optional[bytes] = raw if isinstance(raw, (bytes, bytearray)) else None
 
-            record["id"]          = record_id
+            record["id"] = record_id
             record["image_bytes"] = raw
-            record["file_name"]   = record_id  # fallback — no original filename
+            record["file_name"] = record_id  # fallback — no original filename
 
             if raw:
                 try:
                     pil = Image.open(io.BytesIO(raw)).convert("RGB")
-                    record["pil_image"]    = pil
-                    record["width"]        = pil.width
-                    record["height"]       = pil.height
+                    record["pil_image"] = pil
+                    record["width"] = pil.width
+                    record["height"] = pil.height
                     record["image_format"] = "JPEG"  # best-effort default
                 except Exception as exc:
-                    logger.warning("Could not decode image bytes for id=%s: %s",
-                                   record_id, exc)
-                    record["pil_image"]    = None
-                    record["width"]        = None
-                    record["height"]       = None
+                    logger.warning("Could not decode image bytes for id=%s: %s", record_id, exc)
+                    record["pil_image"] = None
+                    record["width"] = None
+                    record["height"] = None
                     record["image_format"] = None
             else:
-                logger.warning("No bytes found for id=%s in column '%s'",
-                               record_id, bytes_col)
-                record["pil_image"]    = None
-                record["width"]        = None
-                record["height"]       = None
+                logger.warning("No bytes found for id=%s in column '%s'", record_id, bytes_col)
+                record["pil_image"] = None
+                record["width"] = None
+                record["height"] = None
                 record["image_format"] = None
 
             yield record
 
     def merge_shards(
-            self,
-            output_filename: str,
-            pattern: str = "shard-*.parquet",
-            *,
-            schema: Optional[pa.Schema] = None,
-            delete_originals: bool = False,
+        self,
+        output_filename: str,
+        pattern: str = "shard-*.parquet",
+        *,
+        schema: Optional[pa.Schema] = None,
+        delete_originals: bool = False,
     ) -> Path:
         """Concatenate all shards matching *pattern* into one file."""
         shard_paths = self.list_files(pattern)
@@ -347,81 +332,45 @@ class ParquetAdapter(BaseFileAdapter):
 
     @staticmethod
     def build_filter_input_record(
-            file_path: Union[Path, str, None] = None,
-            *,
-            image_bytes: Optional[bytes] = None,
-            pil_image: Optional[Image.Image] = None,
-            record_id: Optional[str] = None,
-            raw_record: Optional[Dict[str, Any]] = None,
+        raw_record: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Build a normalised input record for the filter stage.
+        Build a normalised input record for the filter stage from a raw Parquet record.
 
-        Two usage modes:
+        Parameters
+        ----------
+        raw_record : dict
+            A raw Parquet row originating from ``ParquetAdapter.read_raw_input()``.
+            Must contain `id`, `image_bytes`, `pil_image`, `width`, `height`,
+            `image_format`, and `file_name` keys.
 
-        1. **From a file on disk** (original behaviour):
-           Pass ``file_path``; image is read from disk if bytes not provided.
-
-        2. **From a raw Parquet record** (new: ``id + data`` source):
-           Pass ``raw_record=row`` where ``row`` comes from
-           ``ParquetAdapter.read_raw_input()``. The record must already
-           contain ``id``, ``image_bytes``, ``pil_image``, ``width``,
-           ``height``, ``image_format``, and ``file_name`` keys
-           (all populated by read_raw_input).
-
-        ``record_id`` overrides the id in either mode.
+        Returns
+        -------
+        dict
+            A normalised record dict adhering to FILTER_INPUT_SCHEMA conventions
+            for the downstream pipeline.
         """
-        # ── Mode 2: from read_raw_input() row ─────────────────────────
-        if raw_record is not None:
-            pil = raw_record.get("pil_image")
-            img_bytes = raw_record.get("image_bytes")
-            return {
-                "id":           record_id or raw_record.get("id") or str(uuid.uuid4()),
-                "file_name":    raw_record.get("file_name", raw_record.get("id", "")),
-                "file_path":    raw_record.get("file_path", ""),
-                "image_bytes":  img_bytes,
-                "image_format": raw_record.get("image_format", "JPEG"),
-                "width":        raw_record.get("width") or (pil.width if pil else None),
-                "height":       raw_record.get("height") or (pil.height if pil else None),
-                "ingested_at":  datetime.now(tz=timezone.utc),
-            }
-
-        # ── Mode 1: from file path ─────────────────────────────────────
-        if file_path is None:
-            raise ValueError("Provide either file_path or raw_record.")
-
-        file_path = Path(file_path)
-
-        if image_bytes is None and pil_image is None:
-            with open(file_path, "rb") as fh:
-                image_bytes = fh.read()
-
-        if pil_image is None:
-            pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")  # type: ignore[arg-type]
-
-        if image_bytes is None:
-            buf = io.BytesIO()
-            fmt = file_path.suffix.lstrip(".").upper() or "JPEG"
-            pil_image.save(buf, format=fmt if fmt in ("JPEG", "PNG", "WEBP") else "JPEG")
-            image_bytes = buf.getvalue()
+        pil: Optional[Image.Image] = raw_record.get("pil_image")
+        img_bytes: Optional[bytes] = raw_record.get("image_bytes")
+        record_id: str = raw_record.get("id") or str(uuid.uuid4())
 
         return {
-            "id":           record_id or str(uuid.uuid4()),
-            "file_name":    file_path.name,
-            "file_path":    str(file_path.resolve()),
-            "image_bytes":  image_bytes,
-            "image_format": file_path.suffix.lstrip(".").upper() or "JPEG",
-            "width":        pil_image.width,
-            "height":       pil_image.height,
-            "ingested_at":  datetime.now(tz=timezone.utc),
+            "id": record_id,
+            "file_name": raw_record.get("file_name", record_id),
+            "file_path": raw_record.get("file_path", ""),
+            "image_bytes": img_bytes,
+            "image_format": raw_record.get("image_format", "JPEG"),
+            "width": raw_record.get("width") or (pil.width if pil else None),
+            "height": raw_record.get("height") or (pil.height if pil else None),
+            "ingested_at": datetime.now(tz=timezone.utc),
         }
 
     @staticmethod
     def build_filter_output_record(
-            input_record: Dict[str, Any],
-            filter_result: str,
-            *,
-            error: Optional[str] = None,
+        input_record: Dict[str, Any],
+        filter_result: str,
+        *,
+        error: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Build a FILTER_OUTPUT_SCHEMA row from an input record + filter result.
@@ -430,62 +379,47 @@ class ParquetAdapter(BaseFileAdapter):
         """
         keep = filter_result.upper() == "YES"
         return {
-            "id":            input_record["id"],
-            "file_name":     input_record["file_name"],
-            "file_path":     input_record["file_path"],
-            "image_bytes":   input_record.get("image_bytes") if keep else None,
-            "image_format":  input_record.get("image_format"),
-            "width":         input_record.get("width"),
-            "height":        input_record.get("height"),
+            "id": input_record.get("id", ""),
+            "file_name": input_record.get("file_name"),
+            "file_path": input_record.get("file_path", ""),
+            "image_bytes": input_record.get("image_bytes") if keep else None,
+            "image_format": input_record.get("image_format"),
+            "width": input_record.get("width"),
+            "height": input_record.get("height"),
             "filter_result": filter_result.upper(),
-            "processed_at":  datetime.now(tz=timezone.utc),
-            "error":         error,
+            "processed_at": datetime.now(tz=timezone.utc),
+            "error": error,
         }
 
     @staticmethod
     def build_label_output_record(
-            filter_record: Dict[str, Any],
-            label_fields: Dict[str, Any],
+        filter_record: Dict[str, Any],
+        label_fields: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Build a LABEL_OUTPUT_SCHEMA row from a filter record + label fields.
         """
         return {
-            "id":               filter_record["id"],
-            "file_name":        filter_record["file_name"],
-            "file_path":        filter_record["file_path"],
-            "image_bytes":      filter_record.get("image_bytes"),
-            "image_format":     filter_record.get("image_format"),
-            "width":            filter_record.get("width"),
-            "height":           filter_record.get("height"),
-            "filter_result":    filter_record.get("filter_result"),
-            "label_json":       label_fields.get("label_json"),
-            "category":         label_fields.get("category"),
-            "subcategory":      label_fields.get("subcategory"),
-            "description":      label_fields.get("description"),
-            "landmark":         label_fields.get("landmark"),
-            "city":             label_fields.get("city"),
-            "mood":             label_fields.get("mood"),
-            "is_professional":  label_fields.get("is_professional"),
+            "id": filter_record.get("id", ""),
+            "file_name": filter_record.get("file_name"),
+            "file_path": filter_record.get("file_path", ""),
+            "image_bytes": filter_record.get("image_bytes"),
+            "image_format": filter_record.get("image_format"),
+            "width": filter_record.get("width"),
+            "height": filter_record.get("height"),
+            "filter_result": filter_record.get("filter_result"),
+            "label_json": label_fields.get("label_json"),
+            "category": label_fields.get("category"),
+            "subcategory": label_fields.get("subcategory"),
+            "description": label_fields.get("description"),
+            "landmark": label_fields.get("landmark"),
+            "city": label_fields.get("city"),
+            "mood": label_fields.get("mood"),
+            "is_professional": label_fields.get("is_professional"),
             "has_text_overlay": label_fields.get("has_text_overlay"),
-            "processed_at":     datetime.now(tz=timezone.utc),
-            "error":            label_fields.get("error"),
+            "processed_at": datetime.now(tz=timezone.utc),
+            "error": label_fields.get("error"),
         }
-
-    @staticmethod
-    def image_to_bytes(
-            image: Union[Image.Image, Path, str],
-            *,
-            fmt: str = "JPEG",
-            quality: int = 90,
-    ) -> bytes:
-        """Encode a PIL Image or file path to bytes."""
-        if isinstance(image, (str, Path)):
-            with open(image, "rb") as fh:
-                return fh.read()
-        buf = io.BytesIO()
-        image.save(buf, format=fmt, quality=quality)
-        return buf.getvalue()
 
     # ── Private helpers ────────────────────────────────────────────────
 

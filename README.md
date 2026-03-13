@@ -102,27 +102,27 @@ All variables are optional — sensible defaults are provided.
 
 ### Model
 
-| Variable         | Default                       | Description                                          |
-|------------------|-------------------------------|------------------------------------------------------|
-| `VLM_MODEL_ID`   | `Qwen/Qwen3-VL-8B-Instruct`   | HuggingFace model ID                                 |
-| `HF_TOKEN`       | —                             | HuggingFace access token (required for gated models) |
-| `HF_CACHE_DIR`   | `~/.cache/huggingface`        | Local cache for model weights                        |
-| `MAX_NEW_TOKENS` | `512`                         | Max tokens generated per VLM call                   |
+| Variable         | Default                     | Description                                          |
+| ---------------- | --------------------------- | ---------------------------------------------------- |
+| `VLM_MODEL_ID`   | `Qwen/Qwen3-VL-8B-Instruct` | HuggingFace model ID                                 |
+| `HF_TOKEN`       | —                           | HuggingFace access token (required for gated models) |
+| `HF_CACHE_DIR`   | `~/.cache/huggingface`      | Local cache for model weights                        |
+| `MAX_NEW_TOKENS` | `512`                       | Max tokens generated per VLM call                    |
 
 ### GPU / device selection
 
-| Variable      | Default  | Description                     |
-|---------------|----------|---------------------------------|
-| `CUDA_DEVICE` | (unset)  | GPU device — see formats below  |
+| Variable      | Default | Description                    |
+| ------------- | ------- | ------------------------------ |
+| `CUDA_DEVICE` | (unset) | GPU device — see formats below |
 
-| `CUDA_DEVICE` value | Behaviour                                                      |
-|---------------------|----------------------------------------------------------------|
-| *(unset)*           | Auto-detect: `cuda:0` if CUDA available, else `cpu`            |
-| `cpu`               | Force CPU inference                                            |
-| `cuda`              | First GPU, `device_map=auto` (spreads across all GPUs)         |
-| `cuda:0`            | Pin to GPU 0 only — no `device_map`                            |
-| `cuda:1`            | Pin to GPU 1 only — no `device_map`                            |
-| `cuda:0,1`          | Multi-GPU spanning GPU 0 and 1 via `device_map=auto`           |
+| `CUDA_DEVICE` value | Behaviour                                              |
+| ------------------- | ------------------------------------------------------ |
+| _(unset)_           | Auto-detect: `cuda:0` if CUDA available, else `cpu`    |
+| `cpu`               | Force CPU inference                                    |
+| `cuda`              | First GPU, `device_map=auto` (spreads across all GPUs) |
+| `cuda:0`            | Pin to GPU 0 only — no `device_map`                    |
+| `cuda:1`            | Pin to GPU 1 only — no `device_map`                    |
+| `cuda:0,1`          | Multi-GPU spanning GPU 0 and 1 via `device_map=auto`   |
 
 When a **specific single GPU** (`cuda:N`) is given, `device_map` is NOT used and the
 model stays entirely on that GPU. This is useful when running multiple pipeline instances
@@ -130,38 +130,38 @@ on a multi-GPU machine — one instance per card.
 
 ### Input source
 
-| Variable            | Default         | Description                                              |
-|---------------------|-----------------|----------------------------------------------------------|
-| `INPUT_SOURCE_TYPE` | `files`         | `files` = scan folder for images; `parquet` = read Parquet |
-| `INPUT_DIR`         | `ROOT_DIR/raw`  | Source folder (images or Parquet files)                  |
-| `INPUT_ID_COL`      | `id`            | ID column name in raw Parquet input                      |
-| `INPUT_BYTES_COL`   | `data`          | Bytes column name in raw Parquet input                   |
+| Variable            | Default        | Description                                                |
+| ------------------- | -------------- | ---------------------------------------------------------- |
+| `INPUT_SOURCE_TYPE` | `files`        | `files` = scan folder for images; `parquet` = read Parquet |
+| `INPUT_DIR`         | `ROOT_DIR/raw` | Source folder (images or Parquet files)                    |
+| `INPUT_ID_COL`      | `id`           | ID column name in raw Parquet input                        |
+| `INPUT_BYTES_COL`   | `data`         | Bytes column name in raw Parquet input                     |
 
 **Parquet input mode** supports minimal datasets with only `id (varchar)` + a bytes column.
 No other columns are required — dimensions and PIL image are decoded automatically.
 
 ### Paths
 
-| Variable   | Default   | Description                                             |
-|------------|-----------|---------------------------------------------------------|
-| `ROOT_DIR` | `./data`  | Root dir — all stage subdirs are auto-derived from this |
+| Variable   | Default  | Description                                             |
+| ---------- | -------- | ------------------------------------------------------- |
+| `ROOT_DIR` | `./data` | Root dir — all stage subdirs are auto-derived from this |
 
 ### Batching & sharding
 
-| Variable              | Default   | Description                                            |
-|-----------------------|-----------|--------------------------------------------------------|
-| `BATCH_SIZE`          | `10`      | Images per batch (checkpoint saved after each batch)   |
-| `NUM_BATCHES`         | (all)     | Limit total batches (leave empty for all)              |
-| `IMAGES_PER_SHARD`    | `100`     | Records per output Parquet shard                       |
-| `PARQUET_COMPRESSION` | `snappy`  | Codec: `snappy`, `zstd`, `gzip`, `none`                |
+| Variable              | Default  | Description                                          |
+| --------------------- | -------- | ---------------------------------------------------- |
+| `BATCH_SIZE`          | `10`     | Images per batch (checkpoint saved after each batch) |
+| `NUM_BATCHES`         | (all)    | Limit total batches (leave empty for all)            |
+| `IMAGES_PER_SHARD`    | `100`    | Records per output Parquet shard                     |
+| `PARQUET_COMPRESSION` | `snappy` | Codec: `snappy`, `zstd`, `gzip`, `none`              |
 
 ### Retry
 
-| Variable           | Default | Description                        |
-|--------------------|---------|------------------------------------|
-| `VLM_MAX_ATTEMPTS` | `3`     | Retries on transient VLM error     |
-| `VLM_BACKOFF_BASE` | `4.0`   | Back-off base seconds              |
-| `VLM_BACKOFF_MAX`  | `60.0`  | Back-off ceiling seconds           |
+| Variable           | Default | Description                    |
+| ------------------ | ------- | ------------------------------ |
+| `VLM_MAX_ATTEMPTS` | `3`     | Retries on transient VLM error |
+| `VLM_BACKOFF_BASE` | `4.0`   | Back-off base seconds          |
+| `VLM_BACKOFF_MAX`  | `60.0`  | Back-off ceiling seconds       |
 
 ---
 
@@ -171,49 +171,50 @@ No other columns are required — dimensions and PIL image are decoded automatic
 
 Used when `INPUT_SOURCE_TYPE=parquet`. Only two columns are required in the source file:
 
-| Column | Type   | Notes                         |
-|--------|--------|-------------------------------|
-| `id`   | string | Record identifier             |
-| `data` | binary | Raw image bytes               |
+| Column | Type   | Notes             |
+| ------ | ------ | ----------------- |
+| `id`   | string | Record identifier |
+| `data` | binary | Raw image bytes   |
 
 Column names are configurable via `INPUT_ID_COL` / `INPUT_BYTES_COL`.
 
 ### FILTER_OUTPUT_SCHEMA — Stage 1 output
 
-| Column          | Type      | Notes                                      |
-|-----------------|-----------|--------------------------------------------|
-| `id`            | string    | UUID4 — key linking all stages             |
+| Column          | Type      | Notes                                         |
+| --------------- | --------- | --------------------------------------------- |
+| `id`            | string    | UUID4 — key linking all stages                |
 | `file_name`     | string    | Original filename (or `id` for Parquet input) |
-| `file_path`     | string    | Absolute source path                       |
-| `image_bytes`   | binary    | **NULL for filter_result=NO** (saves space) |
-| `image_format`  | string    | JPEG / PNG / WEBP …                        |
-| `width`         | int32     | Pixel width                                |
-| `height`        | int32     | Pixel height                               |
-| `filter_result` | string    | `"YES"` or `"NO"`                          |
-| `processed_at`  | timestamp | UTC                                        |
-| `error`         | string    | NULL on success                            |
+| `file_path`     | string    | Absolute source path                          |
+| `image_bytes`   | binary    | **NULL for filter_result=NO** (saves space)   |
+| `image_format`  | string    | JPEG / PNG / WEBP …                           |
+| `width`         | int32     | Pixel width                                   |
+| `height`        | int32     | Pixel height                                  |
+| `filter_result` | string    | `"YES"` or `"NO"`                             |
+| `processed_at`  | timestamp | UTC                                           |
+| `error`         | string    | NULL on success                               |
 
 ### LABEL_OUTPUT_SCHEMA — Stage 2 output (final)
 
 Inherits all FILTER_OUTPUT_SCHEMA columns, plus:
 
-| Column             | Type   | Notes                                 |
-|--------------------|--------|---------------------------------------|
-| `label_json`       | string | Raw VLM JSON response (provenance)    |
-| `category`         | string | `scenic / food / hotel / people / …`  |
-| `subcategory`      | string | e.g. `beach`, `street_food`           |
-| `description`      | string | One-sentence image description        |
-| `landmark`         | string | Landmark name or null                 |
-| `city`             | string | City name or null                     |
-| `mood`             | string | `warm / vibrant / serene / …`         |
-| `is_professional`  | bool   |                                       |
-| `has_text_overlay` | bool   |                                       |
+| Column             | Type   | Notes                                |
+| ------------------ | ------ | ------------------------------------ |
+| `label_json`       | string | Raw VLM JSON response (provenance)   |
+| `category`         | string | `scenic / food / hotel / people / …` |
+| `subcategory`      | string | e.g. `beach`, `street_food`          |
+| `description`      | string | One-sentence image description       |
+| `landmark`         | string | Landmark name or null                |
+| `city`             | string | City name or null                    |
+| `mood`             | string | `warm / vibrant / serene / …`        |
+| `is_professional`  | bool   |                                      |
+| `has_text_overlay` | bool   |                                      |
 
 ---
 
 ## Idempotency
 
 Checkpoint files are written after every batch. Re-running skips already-processed entries:
+
 - **Stage 1** — tracked by `file_name` (files mode) or `id` (Parquet mode)
 - **Stage 2** — tracked by record UUID (`id`)
 
@@ -236,6 +237,50 @@ ROOT_DIR=./data_b CUDA_DEVICE=cuda:1 python -m pipeline.main
 ---
 
 ## Reusing services in other projects
+
+### Hugging Face Service (CLI & Programmatic)
+
+The `hf_service.py` module can be run directly from the command line for fast data management independent of the main pipeline. It accepts all parameters via CLI flags, making it perfect for CI/CD or standalone scripts (no `.env` file required).
+
+**CLI Usage**
+
+```bash
+# Upload local directory to a HF repo
+python -m services.hf_service export \
+    --token "hf_YourTokenHere" \
+    --repo "username/my-image-dataset" \
+    --repo-type "dataset" \
+    --local-dir "./data/stages/label/output" \
+    --path "data/train" \
+    --commit-msg "Add new curated images"
+
+# Download from HF repo to local machine
+python -m services.hf_service import \
+    --token "hf_YourTokenHere" \
+    --repo "username/my-image-dataset" \
+    --local-dir "./downloads" \
+    --path "data/train"
+```
+
+**Programmatic Usage**
+
+```python
+from services.hf_service import HFService, export_to_hf
+
+# 1. Using the class (best if doing multiple operations)
+svc = HFService(token="hf_...", repo_id="username/my-dataset")
+result = svc.export(local_dir="./data", repo_path="train")
+print(f"Uploaded {result.count} files!")
+
+# 2. Standalone helper function (best for one-off scripts)
+export_to_hf(
+    token="hf_...",
+    repo_id="username/my-dataset",
+    local_dir="./data",
+    repo_path="train",
+    file_filter=lambda p: p.suffix == ".parquet" # Optional filtering
+)
+```
 
 ### VLMService (standalone)
 

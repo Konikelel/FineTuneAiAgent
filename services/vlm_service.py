@@ -3,39 +3,9 @@ services/vlm_service.py
 ───────────────────────
 Reusable Vision-Language-Model services.
 
-Supports any combination of:
-  • PIL Images
-  • Raw bytes
-  • File paths (images)
-  • Plain text (text-only, no image required)
-
-Features:
-  • Lazy model loading (first generate() call triggers download)
-  • Exponential back-off retry on RuntimeError / CUDA OOM
-  • Fully stateless between calls — safe to reuse across pipeline stages
-  • Tested with Qwen/Qwen3-VL-8B-Instruct (trust_remote_code=True)
-
-Standalone usage
-────────────────
-    from services.vlm_service import VLMService
-    from pathlib import Path
-
-    vlm = VLMService("Qwen/Qwen3-VL-8B-Instruct")
-
-    # Vision + text
-    answer = vlm.generate(
-        system_prompt="Answer concisely.",
-        user_prompt="What city is shown?",
-        images=[Path("photo.jpg")],
-    )
-
-    # Text-only (no image)
-    answer = vlm.generate(
-        system_prompt="You are a helpful assistant.",
-        user_prompt="Translate 'hello' to Japanese.",
-    )
-
-    vlm.unload()  # free GPU memory when done
+Handles lazy model loading, exponential back-off retries on transient errors,
+and is safely stateless between calls across the pipeline stages.
+Supports multi-modal inputs (images, raw bytes, paths, and plain text).
 """
 
 from __future__ import annotations
@@ -52,8 +22,8 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_ATTEMPTS = 3
-_DEFAULT_BACKOFF_BASE = 4.0   # seconds
-_DEFAULT_BACKOFF_MAX  = 60.0  # seconds
+_DEFAULT_BACKOFF_BASE = 4.0  # seconds
+_DEFAULT_BACKOFF_MAX = 60.0  # seconds
 
 
 class VLMService:
@@ -93,32 +63,32 @@ class VLMService:
     """
 
     def __init__(
-            self,
-            model_id: str,
-            *,
-            device: Optional[str] = None,
-            torch_dtype: Optional[torch.dtype] = None,
-            max_new_tokens: int = 512,
-            cache_dir: Optional[str] = None,
-            hf_token: Optional[str] = None,
-            max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
-            backoff_base: float = _DEFAULT_BACKOFF_BASE,
-            backoff_max: float = _DEFAULT_BACKOFF_MAX,
+        self,
+        model_id: str,
+        *,
+        device: Optional[str] = None,
+        torch_dtype: Optional[torch.dtype] = None,
+        max_new_tokens: int = 512,
+        cache_dir: Optional[str] = None,
+        hf_token: Optional[str] = None,
+        max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
+        backoff_base: float = _DEFAULT_BACKOFF_BASE,
+        backoff_max: float = _DEFAULT_BACKOFF_MAX,
     ) -> None:
-        self.model_id       = model_id
+        self.model_id = model_id
         self.max_new_tokens = max_new_tokens
-        self.cache_dir      = cache_dir
-        self.hf_token       = hf_token
-        self.max_attempts   = max_attempts
-        self.backoff_base   = backoff_base
-        self.backoff_max    = backoff_max
+        self.cache_dir = cache_dir
+        self.hf_token = hf_token
+        self.max_attempts = max_attempts
+        self.backoff_base = backoff_base
+        self.backoff_max = backoff_max
 
         self.device, self._use_device_map = self._resolve_device(device)
         self.torch_dtype: torch.dtype = torch_dtype or (
             torch.float16 if self.device.startswith("cuda") else torch.float32
         )
 
-        self._model     = None
+        self._model = None
         self._processor = None
 
     # ── Device resolution ──────────────────────────────────────────────
@@ -154,7 +124,7 @@ class VLMService:
             return "cuda:0", True
 
         if device.startswith("cuda:"):
-            remainder = device[len("cuda:"):]
+            remainder = device[len("cuda:") :]
             if "," in remainder:
                 # Multi-GPU: "cuda:0,1" → primary = cuda:0, device_map=auto
                 primary_idx = remainder.split(",")[0].strip()
@@ -163,19 +133,18 @@ class VLMService:
             return device, False
 
         raise ValueError(
-            f"Unrecognised device string: {device!r}. "
-            "Use 'cpu', 'cuda', 'cuda:0', 'cuda:1', or 'cuda:0,1' etc."
+            f"Unrecognised device string: {device!r}. " "Use 'cpu', 'cuda', 'cuda:0', 'cuda:1', or 'cuda:0,1' etc."
         )
 
     # ── Public API ─────────────────────────────────────────────────────
 
     def generate(
-            self,
-            system_prompt: str,
-            user_prompt: str,
-            *,
-            images: Optional[List[Union[Image.Image, bytes, Path, str]]] = None,
-            texts: Optional[List[str]] = None,
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        images: Optional[List[Union[Image.Image, bytes, Path, str]]] = None,
+        texts: Optional[List[str]] = None,
     ) -> str:
         """
         Run inference and return the model's text response.
@@ -205,13 +174,11 @@ class VLMService:
         """
         self._ensure_loaded()
 
-        pil_images, user_content = self._build_user_content(
-            images or [], texts or [], user_prompt
-        )
+        pil_images, user_content = self._build_user_content(images or [], texts or [], user_prompt)
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": user_content},
+            {"role": "user", "content": user_content},
         ]
 
         inputs = self._prepare_inputs(messages, pil_images)
@@ -224,7 +191,7 @@ class VLMService:
 
     def unload(self) -> None:
         """Release model weights from (GPU) memory."""
-        self._model     = None
+        self._model = None
         self._processor = None
         self._maybe_clear_cuda_cache()
         logger.info("VLMService: model unloaded")
@@ -245,6 +212,7 @@ class VLMService:
         t0 = time.perf_counter()
 
         from transformers import AutoProcessor
+
         self._processor = AutoProcessor.from_pretrained(
             self.model_id,
             trust_remote_code=True,
@@ -276,15 +244,13 @@ class VLMService:
 
         try:
             from transformers import Qwen2_5_VLForConditionalGeneration
-            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                self.model_id, **common_kwargs
-            )
+
+            model = Qwen2_5_VLForConditionalGeneration.from_pretrained(self.model_id, **common_kwargs)
             logger.debug("Loaded via Qwen2_5_VLForConditionalGeneration")
         except (ImportError, OSError, ValueError):
             from transformers import AutoModelForVision2Seq
-            model = AutoModelForVision2Seq.from_pretrained(
-                self.model_id, **common_kwargs
-            )
+
+            model = AutoModelForVision2Seq.from_pretrained(self.model_id, **common_kwargs)
             logger.debug("Loaded via AutoModelForVision2Seq (fallback)")
 
         # When not using device_map, move model to the exact requested device
@@ -297,10 +263,10 @@ class VLMService:
     # ── Input preparation ──────────────────────────────────────────────
 
     def _build_user_content(
-            self,
-            images: List,
-            texts: List[str],
-            user_prompt: str,
+        self,
+        images: List,
+        texts: List[str],
+        user_prompt: str,
     ) -> Tuple[List[Image.Image], List[Dict]]:
         """Convert raw inputs into a HF-compatible content list."""
         pil_images: List[Image.Image] = []
@@ -358,28 +324,27 @@ class VLMService:
                     self._maybe_clear_cuda_cache()
                     logger.warning(
                         "CUDA OOM on attempt %d/%d — cache cleared",
-                        attempt, self.max_attempts,
+                        attempt,
+                        self.max_attempts,
                     )
                 else:
                     logger.warning(
                         "RuntimeError on attempt %d/%d: %s",
-                        attempt, self.max_attempts, exc,
+                        attempt,
+                        self.max_attempts,
+                        exc,
                     )
 
                 if attempt < self.max_attempts:
                     delay = min(
                         self.backoff_base * (2 ** (attempt - 1)),
                         self.backoff_max,
-                        )
+                    )
                     logger.info("Retrying in %.1f s …", delay)
                     time.sleep(delay)
 
-        logger.error(
-            "Generation failed after %d attempts: %s", self.max_attempts, last_exc
-        )
-        raise RuntimeError(
-            f"VLMService: generation failed after {self.max_attempts} attempts"
-        ) from last_exc
+        logger.error("Generation failed after %d attempts: %s", self.max_attempts, last_exc)
+        raise RuntimeError(f"VLMService: generation failed after {self.max_attempts} attempts") from last_exc
 
     @torch.no_grad()
     def _run_generation(self, inputs) -> str:
@@ -389,10 +354,7 @@ class VLMService:
             do_sample=False,
         )
         # Strip prompt tokens from each output sequence
-        new_ids = [
-            out[len(inp):]
-            for inp, out in zip(inputs["input_ids"], output_ids)
-        ]
+        new_ids = [out[len(inp) :] for inp, out in zip(inputs["input_ids"], output_ids)]
         decoded = self._processor.batch_decode(
             new_ids,
             skip_special_tokens=True,

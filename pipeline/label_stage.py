@@ -3,14 +3,11 @@ pipeline/label_stage.py
 ───────────────────────
 Stage 2 — Structured labelling.
 
-Input  : image (Path / PIL / bytes) + optional pre-loaded bytes from Parquet
-Output : dict with all LABEL_OUTPUT_SCHEMA label fields
+Input  : Image + optional pre-loaded bytes from Parquet
+Output : Dictionary with all LABEL_OUTPUT_SCHEMA fields
 
-Handles:
-  • Markdown fences around JSON (```json … ```)
-  • Leading / trailing whitespace
-  • Partial JSON (regex fallback extraction)
-  • Completely invalid JSON (returns error record)
+Handles robust JSON extraction from the VLM output, mapping
+it directly to the Parquet schema structure.
 """
 
 from __future__ import annotations
@@ -29,16 +26,36 @@ from services.vlm_service import VLMService
 logger = logging.getLogger(__name__)
 
 _REQUIRED_FIELDS = {
-    "category", "subcategory", "description",
-    "landmark", "city", "mood", "is_professional", "has_text_overlay",
+    "category",
+    "subcategory",
+    "description",
+    "landmark",
+    "city",
+    "mood",
+    "is_professional",
+    "has_text_overlay",
 }
 _VALID_CATEGORIES = {
-    "scenic", "food", "hotel", "people", "itinerary",
-    "template", "pricing", "lifestyle", "shopping", "transport",
+    "scenic",
+    "food",
+    "hotel",
+    "people",
+    "itinerary",
+    "template",
+    "pricing",
+    "lifestyle",
+    "shopping",
+    "transport",
 }
 _VALID_MOODS = {
-    "warm", "cool", "vibrant", "serene",
-    "adventurous", "luxurious", "casual", "romantic",
+    "warm",
+    "cool",
+    "vibrant",
+    "serene",
+    "adventurous",
+    "luxurious",
+    "casual",
+    "romantic",
 }
 
 
@@ -57,19 +74,29 @@ class LabelStage:
         vlm: VLMService,
         *,
         system_prompt: str = LABEL_SYSTEM_PROMPT,
-        user_prompt: str   = LABEL_USER_PROMPT,
+        user_prompt: str = LABEL_USER_PROMPT,
     ) -> None:
-        self.vlm           = vlm
+        self.vlm = vlm
         self.system_prompt = system_prompt
-        self.user_prompt   = user_prompt
+        self.user_prompt = user_prompt
 
     def run(self, image: Union[Path, str, bytes, Image.Image]) -> Dict[str, Any]:
         """
-        Label *image* and return a flat dict of parsed label fields.
+        Evaluate an image and return a flat dictionary of parsed label fields.
 
-        Every key from ``_REQUIRED_FIELDS`` is guaranteed to be present
-        (missing ones default to None). An ``error`` key is populated
-        if parsing failed; ``label_json`` holds the raw VLM response.
+        Parameters
+        ----------
+        image : Path, str, bytes, or PIL.Image.Image
+            The raw image or path to evaluate.
+
+        Returns
+        -------
+        Dict[str, Any]
+            A dictionary containing parsed output that perfectly matches the
+            LABEL_OUTPUT_SCHEMA parquet schema. Every fundamental key from
+            ``_REQUIRED_FIELDS`` is guaranteed to be present (missing ones
+            default to None). An ``error`` key is populated if parsing failed,
+            and ``label_json`` holds the raw VLM response for provenance.
         """
         name = Path(image).name if isinstance(image, (str, Path)) else "<bytes>"
 
@@ -130,29 +157,29 @@ class LabelStage:
                 data[bool_field] = val.lower() in ("true", "yes", "1")
 
         return {
-            "label_json":       raw,
-            "category":         data.get("category"),
-            "subcategory":      data.get("subcategory"),
-            "description":      data.get("description"),
-            "landmark":         data.get("landmark"),
-            "city":             data.get("city"),
-            "mood":             data.get("mood"),
-            "is_professional":  data.get("is_professional"),
+            "label_json": raw,
+            "category": data.get("category"),
+            "subcategory": data.get("subcategory"),
+            "description": data.get("description"),
+            "landmark": data.get("landmark"),
+            "city": data.get("city"),
+            "mood": data.get("mood"),
+            "is_professional": data.get("is_professional"),
             "has_text_overlay": data.get("has_text_overlay"),
-            "error":            None,
+            "error": None,
         }
 
     @staticmethod
     def _error_record(msg: str) -> Dict[str, Any]:
         return {
-            "label_json":       None,
-            "category":         None,
-            "subcategory":      None,
-            "description":      None,
-            "landmark":         None,
-            "city":             None,
-            "mood":             None,
-            "is_professional":  None,
+            "label_json": None,
+            "category": None,
+            "subcategory": None,
+            "description": None,
+            "landmark": None,
+            "city": None,
+            "mood": None,
+            "is_professional": None,
             "has_text_overlay": None,
-            "error":            msg,
+            "error": msg,
         }

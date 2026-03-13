@@ -1,12 +1,10 @@
 """
 pipeline/shard_writer.py
 ────────────────────────
-Accumulates records in memory and flushes to numbered Parquet shards.
+Accumulates records in memory and auto-flushes to numbered Parquet shards.
 
-Naming: shard-00001.parquet, shard-00002.parquet, …
-
-On init, scans existing shards and continues numbering from where it
-left off — prevents overwriting shards from previous runs.
+On initialization, it scans for existing shards and continues numbering
+from where it left off, preventing overwriting shards from previous pipeline runs.
 """
 
 from __future__ import annotations
@@ -24,18 +22,19 @@ logger = logging.getLogger(__name__)
 
 class ShardWriter:
     """
-    Buffers records and writes Parquet shards.
+    Buffers records in memory and writes them out as numbered Parquet shards.
 
     Parameters
     ----------
     adapter : ParquetAdapter
-        Points at the output shard directory.
-    images_per_shard : int
-        Buffer size before auto-flush.
+        A pre-configured adapter pointing to the output shard directory.
+    images_per_shard : int, optional
+        Buffer size before an automatic flush is triggered (default is 100).
     schema : pa.Schema, optional
-        Override the adapter's default schema for this writer.
-    start_shard_index : int
-        Override the first shard number.
+        Override the adapter's default schema strictly for this writer sequence.
+    start_shard_index : int, optional
+        Override the first shard number (default is 1). The writer will intelligently
+        resume from the highest existing shard number if it finds any.
     """
 
     def __init__(
@@ -46,14 +45,27 @@ class ShardWriter:
         schema: Optional[pa.Schema] = None,
         start_shard_index: int = 1,
     ) -> None:
-        self.adapter          = adapter
+        self.adapter = adapter
         self.images_per_shard = images_per_shard
-        self.schema           = schema
+        self.schema = schema
         self._buffer: List[Dict[str, Any]] = []
         self._shard_index = self._next_shard_index(start_shard_index)
 
     def add(self, record: Dict[str, Any]) -> Optional[Path]:
-        """Add one record. Auto-flushes when buffer is full."""
+        """
+        Add a single record to the internal buffer. Auto-flushes when full.
+
+        Parameters
+        ----------
+        record : Dict[str, Any]
+            The normalized dictionary representing a Parquet row.
+
+        Returns
+        -------
+        Optional[Path]
+            Returns the Path to the written shard if an auto-flush was triggered.
+            Returns None if the record was merely buffered.
+        """
         self._buffer.append(record)
         if len(self._buffer) >= self.images_per_shard:
             return self._flush_buffer()

@@ -1,8 +1,12 @@
 """
 pipeline/prompts.py
 ───────────────────
-All VLM prompts in one place.
-Import or override from .env without touching pipeline logic.
+All VLM prompts in one centralized place.
+
+The specific text in these prompts forms a strict contract with the
+parsing logic in `FilterStage` and `LabelStage`. Any modifications to
+the desired outputs here must be reflected in the respective parsing
+code (e.g., if changing "YES" to "KEEP", `FilterStage.run()` must be updated).
 """
 
 # ── Stage 1: Quality filter ────────────────────────────────────────────
@@ -37,8 +41,7 @@ FILTER_USER_PROMPT: str = (
 # ── Stage 2: Structured labelling ─────────────────────────────────────
 
 LABEL_SYSTEM_PROMPT: str = (
-    "You are an expert travel-image tagger. "
-    "Return ONLY valid JSON with no markdown, no code fences, no extra text."
+    "You are an expert travel-image tagger. " "Return ONLY valid JSON with no markdown, no code fences, no extra text."
 )
 
 LABEL_USER_PROMPT: str = """Analyze this travel/lifestyle image and classify it.
