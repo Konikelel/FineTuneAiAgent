@@ -51,7 +51,7 @@ A Python service for pushing and pulling files between a local directory and any
 ## Installation
 
 ```bash
-# 1. Clone or copy the service files into your project
+# 1. Clone or copy the services files into your project
 # 2. Install dependencies
 pip install -r requirements.txt
 

@@ -281,6 +281,11 @@ class ParquetAdapter(BaseFileAdapter):
             record_id = str(record.pop(id_col))
             raw: Optional[bytes] = record.pop(bytes_col, None)
 
+            if isinstance(raw, dict):
+                raw = raw.get("bytes") or raw.get("data")
+
+            raw: Optional[bytes] = raw if isinstance(raw, (bytes, bytearray)) else None
+
             record["id"]          = record_id
             record["image_bytes"] = raw
             record["file_name"]   = record_id  # fallback — no original filename

@@ -1,7 +1,7 @@
 """
 services/vlm_service.py
 ───────────────────────
-Reusable Vision-Language-Model service.
+Reusable Vision-Language-Model services.
 
 Supports any combination of:
   • PIL Images

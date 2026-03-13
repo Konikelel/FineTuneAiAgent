@@ -45,6 +45,7 @@ import os
 import sys
 import argparse
 import logging
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -130,7 +131,7 @@ def _load_env_defaults() -> dict:
 # ── Service class ──────────────────────────────────────────────────────────────
 class HFService:
     """
-    Reusable Hugging Face import/export service.
+    Reusable Hugging Face import/export services.
 
     Constructor parameters all fall back to .env values when omitted,
     so you can mix explicit args with .env for secrets you'd rather not
@@ -394,7 +395,24 @@ class HFService:
                 f"Path '{rpath}' not found in repo '{rid}'."
             )
 
-        base = Path(downloaded_path)
+        # snapshot_download preserves the full repo structure, e.g.:
+        #   local_dir/data/train/shard-00000.parquet
+        # We move files up so they land directly in local_dir:
+        #   local_dir/shard-00000.parquet
+        nested_dir = Path(downloaded_path) / rpath
+        if nested_dir.exists() and nested_dir.is_dir():
+            log.info("Flattening '%s' → '%s'", nested_dir, ldir)
+            for file in nested_dir.rglob("*"):
+                if file.is_file():
+                    dest = ldir / file.relative_to(nested_dir)
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(file), str(dest))
+            # Remove leftover empty repo_path dirs (e.g. data/train, data)
+            top_nested = ldir / Path(rpath).parts[0]
+            if top_nested.exists():
+                shutil.rmtree(str(top_nested))
+
+        base = ldir
         downloaded_files = [
             str(f.relative_to(base)) for f in base.rglob("*") if f.is_file()
         ]
@@ -485,7 +503,7 @@ def import_from_hf(
 # ── CLI ────────────────────────────────────────────────────────────────────────
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Hugging Face repo import / export service",
+        description="Hugging Face repo import / export services",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command", required=True)
