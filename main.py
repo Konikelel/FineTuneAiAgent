@@ -33,6 +33,7 @@ Run
 """
 
 from __future__ import annotations
+import warnings
 
 import argparse
 import io
@@ -53,6 +54,8 @@ from pipeline.filter_stage import FilterStage
 from pipeline.label_stage import LabelStage
 from pipeline.shard_writer import ShardWriter
 from services.vlm_service import VLMService
+
+warnings.filterwarnings("ignore")
 
 # ── Logging ────────────────────────────────────────────────────────────────
 
