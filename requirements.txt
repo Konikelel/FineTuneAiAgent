@@ -1,0 +1,23 @@
+# Core ML
+torch>=2.2.0
+torchvision>=0.17.0
+transformers>=4.49.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
+Pillow>=10.0.0
+
+# Qwen3-VL tokenizer
+tiktoken>=0.7.0
+
+# Parquet / data
+pyarrow>=16.0.0
+pandas>=2.2.0
+
+# Config / env
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-dotenv>=1.0.0
+
+# Dev / test
+pytest>=8.0.0
+pytest-mock>=3.14.0
