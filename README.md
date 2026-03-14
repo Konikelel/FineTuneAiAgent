@@ -231,29 +231,74 @@ ROOT_DIR=./data_b CUDA_DEVICE=cuda:1 python -m pipeline.main
 
 ### Hugging Face Service (CLI & Programmatic)
 
-The `hf_service.py` module can be run directly from the command line for fast data management independent of the main pipeline. It accepts all parameters via CLI flags, making it perfect for CI/CD or standalone scripts (no `.env` file required).
+The `hf_service.py` module can be run directly from the command line for fast data management independent of the main pipeline. It accepts all parameters via CLI flags, making it perfect for CI/CD or standalone scripts.
 
-**CLI Usage**
+#### Environment Setup (Optional but Recommended)
+Instead of passing credentials and repository details every time via the CLI, you can define them in your `.env` file. The CLI will automatically use these as defaults:
 
-```bash
-# Upload local directory to a HF repo
-python -m services.hf_service export \
-    --token "hf_YourTokenHere" \
-    --repo "username/my-image-dataset" \
-    --repo-type "dataset" \
-    --local-dir "./data/stages/label/output" \
-    --path "data/train" \
-    --commit-msg "Add new curated images"
-
-# Download from HF repo to local machine
-python -m services.hf_service import \
-    --token "hf_YourTokenHere" \
-    --repo "username/my-image-dataset" \
-    --local-dir "./downloads" \
-    --path "data/train"
+```env
+HF_TOKEN="hf_your_token_here"
+HF_REPO_ID="username/repo-name"
+HF_REPO_TYPE="dataset"       # 'dataset' or 'model'
+HF_DATA_PATH="data/train"    # The folder path inside the HF repo
+LOCAL_DATA_DIR="./local_data" # Your local folder path
+HF_REVISION="main"           # Branch/tag
 ```
 
-**Programmatic Usage**
+#### CLI Usage
+
+If you don't have a `.env` file or want to override the default settings, you can use double-dashed flags (e.g., `--repo`, `--token`).
+
+**1. Export (Upload to Hugging Face)**
+Uploads a local folder to a Hugging Face repository. Prints `ExportResult` upon completion.
+```bash
+# Basic usage (relies on .env):
+python ./services/hf_service.py export
+
+# Advanced usage (overriding settings):
+python ./services/hf_service.py export \
+  --token "hf_YourTokenHere" \
+  --repo "username/my-image-dataset" \
+  --repo-type "dataset" \
+  --path "/data/labeled" \
+  --local-dir "./data/stages/label/output" \
+  --commit-msg "Add new curated images" \
+  --public
+```
+*(By default, it creates the repository as **private**. Use `--public` to make it public).*
+
+**2. Import (Download from Hugging Face)**
+Downloads files from a remote Hugging Face repository to your local machine.
+```bash
+# Basic usage:
+python ./services/hf_service.py import
+
+# Advanced usage (with file filtering):
+python ./services/hf_service.py import \
+  --repo "username/my-image-dataset" \
+  --local-dir "./downloads" \
+  --path "data/train" \
+  --allow-patterns "*.parquet" "*.json" \
+  --ignore-patterns "*.md"
+```
+
+**3. Info (View Repository Metadata)**
+Prints out metadata about a Hugging Face repository (downloads, visibility, file list).
+```bash
+python ./services/hf_service.py info \
+  --repo "username/my-image-dataset" \
+  --repo-type "dataset"
+```
+
+#### Shared CLI Arguments
+These arguments can be attached to **any** of the CLI commands:
+- `--token` : Your Hugging Face access token
+- `--repo` : The HF repository ID (e.g. `username/my-dataset`)
+- `--repo-type` : `dataset` or `model`
+- `--path` : Sub-directory inside the HF repo (e.g. `data/train`)
+- `--local-dir` : Path to your local directory
+
+#### Programmatic Usage
 
 ```python
 from services.hf_service import HFService, export_to_hf
